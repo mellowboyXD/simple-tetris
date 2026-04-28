@@ -7,7 +7,7 @@ A simple tetris game made entirely in c using the Raylib library.
 Clone the repo and then run the following commands.
 
 ```bash
-cd tetris && make
+cd simple-tetris && make
 ```
 
 Finally run the game.
