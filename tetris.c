@@ -26,7 +26,16 @@
 #define SCREEN_WIDTH (WELL_WIDTH + WALL_OFFSET + RPANEL_WIDTH)
 #define SCREEN_HEIGHT (WELL_HEIGHT + WALL_OFFSET + DPANEL_HEIGHT)
 
-enum CellColors {CELL_NONE, CELL_BLUE, CELL_RED, CELL_YELLOW, CELL_GREEN};
+/* CELL_COLOR_COUNT acts as a sentinel value signifying the end */
+typedef enum CellColor {
+        CELL_BLUE, 
+        CELL_RED, 
+        CELL_YELLOW, 
+        CELL_GREEN, 
+        CELL_GRAY,
+        CELL_VIOLET,
+        CELL_NONE
+} CellColor;
 
 typedef enum Direction {NONE, LEFT, RIGHT, UP, DOWN} Direction;
 
@@ -37,64 +46,74 @@ typedef struct Cell {
         Color color;
 } Cell;
 
+typedef struct TetraShape {
+        int cells[TETRA_SHAPE][TETRA_SHAPE];
+        CellColor cellColor;
+} TetraShape;
+
 typedef struct Tetramino {
         float x;
         float y;
-        int shape[TETRA_SHAPE][TETRA_SHAPE];
-        Color color;
+        TetraShape shape;
 } Tetramino;
 
 void DrawCell(float x, float y, Color color);
-void DrawCellCell(Cell cell);
-void DrawCellCellInsideWell(Cell cell);
 void DrawPanels();
 void DrawTextOnRPanel(const char *text, int x, int y, int fontSize, 
                 Color color);
 void DrawTextOnDPanel(const char *text, int x, int y, int fontSize, 
                 Color color);
-void DrawPeekTetraminoBlock(int nextTetramino[TETRA_SHAPE][TETRA_SHAPE]);
+void DrawPeekTetraminoBlock(TetraShape nextTetramino);
 void DrawScore(int score);
 void DrawLevel(int level);
 void DrawCommands();
 void DrawCredits();
 void DrawUI();
-void DrawWell(int well[PLAY_HEIGHT][PLAY_WIDTH]);
+void DrawWell(CellColor well[PLAY_HEIGHT][PLAY_WIDTH]);
 void DrawTetramino(Tetramino tetramino);
 
-bool isThereYCollision(Tetramino tetra, int well[PLAY_HEIGHT][PLAY_WIDTH]);
-bool isThereXCollision(Tetramino tetra, int well[PLAY_HEIGHT][PLAY_WIDTH], 
+bool isThereYCollision(Tetramino tetra, CellColor well[PLAY_HEIGHT][PLAY_WIDTH]);
+bool isThereXCollision(Tetramino tetra, CellColor well[PLAY_HEIGHT][PLAY_WIDTH], 
                 Direction dir);
 
-void MarkWell(Tetramino tetra, int well[PLAY_HEIGHT][PLAY_WIDTH]);
-void ResetTetramino(Tetramino *current, int next[TETRA_SHAPE][TETRA_SHAPE]);
+void MarkWell(Tetramino tetra, CellColor well[PLAY_HEIGHT][PLAY_WIDTH]);
+void ResetTetramino(Tetramino *current, TetraShape *nextTetramino);
 void GenerateRandomTetramino(int next[TETRA_SHAPE][TETRA_SHAPE]);
-void HandleInput(Tetramino *tetra, int well[PLAY_HEIGHT][PLAY_WIDTH]);
+void HandleInput(Tetramino *tetra, CellColor well[PLAY_HEIGHT][PLAY_WIDTH]);
 void RotateTetraminoShape(int currentShape[TETRA_SHAPE][TETRA_SHAPE], 
                 bool clockwise);
 void CopyMatrix(int m, int n, int old[m][n], int new[m][n]);
-void CheckWinningCondition(int well[PLAY_HEIGHT][PLAY_WIDTH], int *score);
-void CheckLosingCondition(int well[PLAY_HEIGHT][PLAY_WIDTH], 
+void CheckWinningCondition(CellColor well[PLAY_HEIGHT][PLAY_WIDTH], int *score);
+void CheckLosingCondition(CellColor well[PLAY_HEIGHT][PLAY_WIDTH], 
                 GameState *gameState);
-int GetWinningRow(int well[PLAY_HEIGHT][PLAY_WIDTH]);
-void ClearRow(int row, int well[PLAY_HEIGHT][PLAY_WIDTH]);
+int GetWinningRow(CellColor well[PLAY_HEIGHT][PLAY_WIDTH]);
+void ClearRow(int row, CellColor well[PLAY_HEIGHT][PLAY_WIDTH]);
 void CopyRows(int n, int old[n], int new[n]);
-void ShiftDownRows(int startRow, int well[PLAY_HEIGHT][PLAY_WIDTH]);
+void ShiftDownRows(int startRow, CellColor well[PLAY_HEIGHT][PLAY_WIDTH]);
 void IncrementScore(int *score);
+CellColor GetRandomColor();
+Color CellColorToColor(CellColor cellColor);
+void InitWell(CellColor well[PLAY_HEIGHT][PLAY_WIDTH]);
 
-void MainDraw(int well[PLAY_HEIGHT][PLAY_WIDTH]);
+void MainDraw(CellColor well[PLAY_HEIGHT][PLAY_WIDTH]);
 void MainUpdate();
 void UpdatePlayGame();
 
-int nextTetramino[TETRA_SHAPE][TETRA_SHAPE];
+TetraShape nextTetramino = {
+        .cells = {{0}},
+        .cellColor = CELL_RED
+};
 
 Tetramino currentTetramino = {
         .x = CELL_SIZE * 3,
         .y = DEFAULT_Y,
-        .shape = {0},
-        .color = BLUE
+        .shape = {
+             .cells = {{0}},
+             .cellColor = CELL_BLUE
+        }
 };
 
-int well[PLAY_HEIGHT][PLAY_WIDTH] = {0};
+CellColor well[PLAY_HEIGHT][PLAY_WIDTH] = {0};
 
 int score = 0;
 int level = 1;
@@ -106,8 +125,9 @@ int main(void)
         InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Tetris Game");
         SetTargetFPS(TARGET_FPS);
 
-        GenerateRandomTetramino(currentTetramino.shape);
-        GenerateRandomTetramino(nextTetramino);
+        InitWell(well);
+        GenerateRandomTetramino(currentTetramino.shape.cells);
+        GenerateRandomTetramino(nextTetramino.cells);
 
         while(!WindowShouldClose()) {
                 BeginDrawing();
@@ -146,12 +166,12 @@ void UpdatePlayGame() {
                 // update well
                 MarkWell(currentTetramino, well);
 
-                ResetTetramino(&currentTetramino, nextTetramino);
+                ResetTetramino(&currentTetramino, &nextTetramino);
 
                 CheckWinningCondition(well, &score);
                 CheckLosingCondition(well, &gameState);
 
-                GenerateRandomTetramino(nextTetramino);
+                GenerateRandomTetramino(nextTetramino.cells);
         }
 }
 
@@ -163,18 +183,35 @@ void UpdatePlayGame() {
  * ===== HELPER FUNCTIONS =====
  */
 
-bool isThereYCollision(Tetramino tetra, int well[PLAY_HEIGHT][PLAY_WIDTH])
+void InitWell(CellColor well[PLAY_HEIGHT][PLAY_WIDTH])
+{
+        for (int i = 0; i < PLAY_HEIGHT; i++) {
+                for (int j = 0; j < PLAY_WIDTH; j++) {
+                        well[i][j] = CELL_NONE;
+                }
+        }
+}
+
+CellColor GetRandomColor()
+{
+        srand(time(NULL));
+        int color = rand() % CELL_NONE;
+        return (CellColor) color;
+}
+
+bool isThereYCollision(Tetramino tetra, CellColor well[PLAY_HEIGHT][PLAY_WIDTH])
 {
         for (int i = 0; i < TETRA_SHAPE; i++) {
                 for (int j = 0; j < TETRA_SHAPE; j++) {
                         float x = j * CELL_SIZE + tetra.x;
                         float y = i * CELL_SIZE + tetra.y;
-                        if (tetra.shape[i][j] == 1) {
+                        if (tetra.shape.cells[i][j] == 1) {
                                 int row = y / CELL_SIZE;
                                 int col = x / CELL_SIZE;
                                 if(row + 1 >= PLAY_HEIGHT)
                                         return true;
-                                if (row >= 0 && well[row + 1][col] != 0) {
+                                if (row >= 0 && 
+                                        well[row + 1][col] != CELL_NONE) {
                                         return true;
                                 }
                         }
@@ -183,14 +220,14 @@ bool isThereYCollision(Tetramino tetra, int well[PLAY_HEIGHT][PLAY_WIDTH])
         return false;
 }
 
-bool isThereXCollision(Tetramino tetra, int well[PLAY_HEIGHT][PLAY_WIDTH], 
+bool isThereXCollision(Tetramino tetra, CellColor well[PLAY_HEIGHT][PLAY_WIDTH], 
                 Direction dir)
 {
         for (int i = 0; i < TETRA_SHAPE; i++) {
                 for (int j = 0; j < TETRA_SHAPE; j++) {
                         float x = j * CELL_SIZE + tetra.x;
                         float y = i * CELL_SIZE + tetra.y;
-                        if (tetra.shape[i][j] == 1) {
+                        if (tetra.shape.cells[i][j] == 1) {
                                 int row = y / CELL_SIZE;
                                 int col = x / CELL_SIZE;
 
@@ -202,7 +239,7 @@ bool isThereXCollision(Tetramino tetra, int well[PLAY_HEIGHT][PLAY_WIDTH],
                                 if (col < 0 || col >= PLAY_WIDTH)
                                         return true;
 
-                                if (row >= 0 && well[row][col] != 0) {
+                                if (row >= 0 && well[row][col] != CELL_NONE) {
                                         return true;
                                 }
                         }
@@ -211,31 +248,26 @@ bool isThereXCollision(Tetramino tetra, int well[PLAY_HEIGHT][PLAY_WIDTH],
         return false;
 }
 
-void MarkWell(Tetramino tetra, int well[PLAY_HEIGHT][PLAY_WIDTH])
+void MarkWell(Tetramino tetra, CellColor well[PLAY_HEIGHT][PLAY_WIDTH])
 {
         for (int i = 0; i < TETRA_SHAPE; i++) {
                 for (int j = 0; j < TETRA_SHAPE; j++) {
                         float x = j * CELL_SIZE + tetra.x;
                         float y = i * CELL_SIZE + tetra.y;
-                        if (tetra.shape[i][j] == 1) {
+                        if (tetra.shape.cells[i][j] != 0) {
                                 int row = y / CELL_SIZE;
                                 int col = x / CELL_SIZE;
-                                well[row][col] = tetra.shape[i][j];
+                                well[row][col] = tetra.shape.cellColor;
                         }
                 }
         }
 }
 
-void ResetTetramino(Tetramino *current, int next[TETRA_SHAPE][TETRA_SHAPE])
+void ResetTetramino(Tetramino *current, TetraShape *nextTetramino)
 {
-        for (int i = 0; i < TETRA_SHAPE; i++) {
-                for (int j = 0; j < TETRA_SHAPE; j++) {
-                        current->x -= CELL_SIZE;
-                        current->shape[i][j] = next[i][j];
-                }
-        }
+        current->shape = *nextTetramino;
 
-        // TODO: generate a random color
+        nextTetramino->cellColor = GetRandomColor();
 
         current->x = CELL_SIZE * 3;
         current->y = DEFAULT_Y;
@@ -298,14 +330,10 @@ void GenerateRandomTetramino(int next[TETRA_SHAPE][TETRA_SHAPE])
                         break;
         }
 
-        for (int i = 0; i < TETRA_SHAPE; i++) {
-                for (int j = 0; j < TETRA_SHAPE; j++) {
-                        next[i][j] = (*nextType)[i][j];
-                }
-        }
+        CopyMatrix(TETRA_SHAPE, TETRA_SHAPE, *nextType, next);
 }
 
-void HandleInput(Tetramino *tetra, int well[PLAY_HEIGHT][PLAY_WIDTH])
+void HandleInput(Tetramino *tetra, CellColor well[PLAY_HEIGHT][PLAY_WIDTH])
 {
         int oldShape[TETRA_SHAPE][TETRA_SHAPE] = {0};
         int key = GetKeyPressed();
@@ -326,14 +354,14 @@ void HandleInput(Tetramino *tetra, int well[PLAY_HEIGHT][PLAY_WIDTH])
                         // TODO: rotate tetramino 90 deg anti-clockwise
                         break;
                 case KEY_SPACE:
-                        CopyMatrix(TETRA_SHAPE, TETRA_SHAPE, tetra->shape, 
+                        CopyMatrix(TETRA_SHAPE, TETRA_SHAPE, tetra->shape.cells, 
                                         oldShape);
-                        RotateTetraminoShape(tetra->shape, true);
+                        RotateTetraminoShape(tetra->shape.cells, true);
                         if (isThereYCollision(*tetra, well) || 
                                 isThereXCollision(*tetra, well, NONE)) {
                                 // reset
                                 CopyMatrix(TETRA_SHAPE, TETRA_SHAPE, oldShape, 
-                                                tetra->shape);
+                                                tetra->shape.cells);
                         }
                         break;
         }
@@ -395,7 +423,7 @@ void IncrementScore(int *score)
         *score += 20;
 }
 
-void CheckWinningCondition(int well[PLAY_HEIGHT][PLAY_WIDTH], int *score)
+void CheckWinningCondition(CellColor well[PLAY_HEIGHT][PLAY_WIDTH], int *score)
 {
         int winningRow;
         while ((winningRow = GetWinningRow(well)) != -1) {
@@ -405,40 +433,40 @@ void CheckWinningCondition(int well[PLAY_HEIGHT][PLAY_WIDTH], int *score)
         }
 }
 
-void CheckLosingCondition(int well[PLAY_HEIGHT][PLAY_WIDTH], 
+void CheckLosingCondition(CellColor well[PLAY_HEIGHT][PLAY_WIDTH], 
                 GameState *gameState)
 {
         int start = PLAY_WIDTH / 2 - TETRA_SHAPE / 2;
 
         for (int i = start; i < (start + TETRA_SHAPE); i++) {
-                if (well[0][i] != 0) {
+                if (well[0][i] != CELL_NONE) {
                         *gameState = LOSE_STATE;
                         return;
                 }
         }
 }
 
-void ClearRow(int row, int well[PLAY_HEIGHT][PLAY_WIDTH])
+void ClearRow(int row, CellColor well[PLAY_HEIGHT][PLAY_WIDTH])
 {
         for (int j = 0; j < PLAY_WIDTH; j++) {
-                well[row][j] = 0;
+                well[row][j] = CELL_NONE;
         }
 }
 
-void ShiftDownRows(int startRow, int well[PLAY_HEIGHT][PLAY_WIDTH])
+void ShiftDownRows(int startRow, CellColor well[PLAY_HEIGHT][PLAY_WIDTH])
 {
         for (int i = startRow; i > 1; i--) {
-                CopyRows(PLAY_WIDTH, well[i - 1], well[i]);
+                CopyRows(PLAY_WIDTH, (int *)well[i - 1], (int *)well[i]);
         }
 }
 
 /* returns the first winning row from bottom to top */
-int GetWinningRow(int well[PLAY_HEIGHT][PLAY_WIDTH])
+int GetWinningRow(CellColor well[PLAY_HEIGHT][PLAY_WIDTH])
 {
         for (int i = PLAY_HEIGHT - 1; i >= 0; i--) {
                 bool isComplete = true;
                 for (int j = 0; j < PLAY_WIDTH; j++) {
-                        if (well[i][j] == 0) {
+                        if (well[i][j] == CELL_NONE) {
                                 isComplete = false;
                         }
                 }
@@ -458,7 +486,7 @@ int GetWinningRow(int well[PLAY_HEIGHT][PLAY_WIDTH])
  * ===== DRAW FUNCTIONS =====
  */
 
-void MainDraw(int well[PLAY_HEIGHT][PLAY_WIDTH])
+void MainDraw(CellColor well[PLAY_HEIGHT][PLAY_WIDTH])
 {
         DrawUI();
         DrawWell(well);
@@ -466,23 +494,19 @@ void MainDraw(int well[PLAY_HEIGHT][PLAY_WIDTH])
 
 }
 
-void DrawWell(int well[PLAY_HEIGHT][PLAY_WIDTH])
+void DrawWell(CellColor well[PLAY_HEIGHT][PLAY_WIDTH])
 {
         for (int row = 0; row < PLAY_HEIGHT; row++) {
                 for (int col = 0; col < PLAY_WIDTH; col++) {
                         float x = col * CELL_SIZE + WALL_OFFSET;
                         float y = row * CELL_SIZE + WALL_OFFSET;
 
-                        switch(well[row][col]) {
-                                case CELL_BLUE:
-                                        DrawCell(x, y, BLUE);
-                                        break;
-                                case CELL_RED:
-                                        DrawCell(x, y, RED);
-                                        break;
-                                default:
-                                        DrawRectangle(x, y, CELL_SIZE, 
-                                                        CELL_SIZE, BLACK);
+                        if (well[row][col] == CELL_NONE) {
+                                DrawRectangle(x, y, CELL_SIZE, CELL_SIZE, 
+                                                BLACK);
+                        } else {
+                                Color color = CellColorToColor(well[row][col]);
+                                DrawCell(x, y, color);
                         }
                 }
         }
@@ -502,37 +526,40 @@ void DrawUI()
         DrawCredits();
 }
 
-void DrawCellCell(Cell cell)
-{
-        const int borderWidth = 2;
-
-        DrawRectangle(cell.pos.x, cell.pos.y, CELL_SIZE, CELL_SIZE, RAYWHITE);
-        DrawRectangle(
-                        cell.pos.x + borderWidth, 
-                        cell.pos.y + borderWidth, 
-                        CELL_SIZE - borderWidth * 2, 
-                        CELL_SIZE - borderWidth * 2, 
-                        cell.color
-        );
-}
-
-void DrawCellCellInsideWell(Cell cell)
-{
-        float x = (cell.pos.x < WELL_WIDTH - CELL_SIZE) ? 
-                cell.pos.x + WALL_OFFSET : cell.pos.x;
-        float y = (cell.pos.y < WELL_HEIGHT - CELL_SIZE) ?
-                cell.pos.y + WALL_OFFSET : cell.pos.y - WALL_OFFSET;
-
-        DrawCell(x, y, cell.color);
-}
-
 void DrawCell(float x, float y, Color color)
 {
-        Cell cell = {
-                .pos = (Vector2) {x, y},
-                .color = color
-        };
-        DrawCellCell(cell);
+        const int borderWidth = 2;
+        DrawRectangle(x, y, CELL_SIZE, CELL_SIZE, RAYWHITE);
+        DrawRectangle(
+                        x + borderWidth, 
+                        y + borderWidth, 
+                        CELL_SIZE - borderWidth * 2, 
+                        CELL_SIZE - borderWidth * 2, 
+                        color
+                     );
+}
+
+Color CellColorToColor(CellColor cellColor)
+{
+        switch(cellColor) {
+                case CELL_NONE:
+                        return BLACK;
+                case CELL_RED:
+                        return RED;
+                case CELL_BLUE:
+                        return BLUE;
+                case CELL_YELLOW:
+                        return YELLOW;
+                case CELL_GREEN:
+                        return GREEN;
+                case CELL_GRAY:
+                        return GRAY;
+                case CELL_VIOLET:
+                        return VIOLET;
+                default:
+                        fprintf(stderr, "[ERROR]: Unknown cell color\n");
+                        return BLACK;
+        }
 }
 
 void DrawTextOnRPanel(const char *text, int x, int y, int fontSize, Color color) 
@@ -549,7 +576,7 @@ void DrawTextOnDPanel(const char *text, int x, int y, int fontSize, Color color)
         DrawText(text, posX, posY, fontSize, color);
 }
 
-void DrawPeekTetraminoBlock(int nextTetramino[TETRA_SHAPE][TETRA_SHAPE])
+void DrawPeekTetraminoBlock(TetraShape next)
 {
         int offsetX = 16 + WELL_WIDTH + WALL_OFFSET;
         float y = WALL_OFFSET + 80;
@@ -562,10 +589,9 @@ void DrawPeekTetraminoBlock(int nextTetramino[TETRA_SHAPE][TETRA_SHAPE])
                 for (int col = 0; col < TETRA_SHAPE; col++) {
                         float cellX = col * cell_size + offsetX;
                         float cellY = row * cell_size + (y + cell_size);
-                        switch(nextTetramino[row][col]) {
-                                case 1:
-                                        DrawCell(cellX, cellY, BLUE);
-                                        break;
+                        if (next.cells[row][col] != 0) {
+                                Color color = CellColorToColor(next.cellColor);
+                                DrawCell(cellX, cellY, color);
                         }
                 }
         }
@@ -605,13 +631,13 @@ void DrawCredits()
         float x = 20;
         float y = 12;
 
-        DrawTextOnDPanel("by mellowboyxd", x, y, 16, BLACK);
+        DrawTextOnDPanel("by mellowboyxd", x, y, 18, BLACK);
 }
 
-void DrawTetramino(Tetramino tetramino)
+void DrawTetramino(Tetramino tetra)
 {
-        float x = tetramino.x + WALL_OFFSET;
-        float y = tetramino.y + WALL_OFFSET;
+        float x = tetra.x + WALL_OFFSET;
+        float y = tetra.y + WALL_OFFSET;
 
         for (int i = 0; i < TETRA_SHAPE; i++) {
                 for (int j = 0; j < TETRA_SHAPE; j++) {
@@ -624,8 +650,10 @@ void DrawTetramino(Tetramino tetramino)
                                 continue;
                         }
 
-                        if (tetramino.shape[i][j] != 0) {
-                                DrawCell(cellX, cellY, tetramino.color);
+                        if (tetra.shape.cells[i][j] != 0) {
+                                CellColor cellColor = tetra.shape.cellColor;
+                                Color color = CellColorToColor(cellColor);
+                                DrawCell(cellX, cellY, color);
                         }
                 }
         }
