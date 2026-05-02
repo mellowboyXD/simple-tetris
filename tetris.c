@@ -126,6 +126,7 @@ void MainDraw(CellColor well[PLAY_HEIGHT][PLAY_WIDTH]);
 void MainUpdate();
 void UpdatePlayGame();
 void UpdateButton(Button *btn);
+void UpdateAudio(Music *music, bool isPaused);
 
 TetraShape nextTetramino = {
         .cells = {{0}},
@@ -173,7 +174,18 @@ Button restartBtn = {
 int main(void)
 {
         InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Tetris Game");
+
+        InitAudioDevice();
+
         SetTargetFPS(TARGET_FPS);
+
+        Music bgMusic = LoadMusicStream("assets/audio/stardust_renderer.mp3");
+        float volume = 0.8f;
+        bool isPaused = false;
+
+        SetMusicVolume(bgMusic, volume);
+
+        PlayMusicStream(bgMusic);
 
         SetupGame();
 
@@ -182,8 +194,12 @@ int main(void)
                 ClearBackground(GRAY);
                 MainDraw(well);
                 MainUpdate();
+                UpdateAudio(&bgMusic, isPaused);
                 EndDrawing();
         }
+
+        CloseAudioDevice();
+
         CloseWindow();
         return 0;
 }
@@ -205,6 +221,14 @@ void MainUpdate()
                 }
                 frameCounter = 0;
         }
+}
+
+void UpdateAudio(Music *music, bool isPaused)
+{
+        UpdateMusicStream(*music);
+
+        if (isPaused) PauseMusicStream(*music);
+        else ResumeMusicStream(*music);
 }
 
 void UpdateButton(Button *btn)
