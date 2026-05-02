@@ -26,7 +26,8 @@
 #define SCREEN_WIDTH (WELL_WIDTH + WALL_OFFSET + RPANEL_WIDTH)
 #define SCREEN_HEIGHT (WELL_HEIGHT + WALL_OFFSET + DPANEL_HEIGHT)
 
-/* CELL_NONE acts as a sentinel value signifying the end */
+/* CELL_NONE also acts as a sentinel value signifying the end of the list of 
+ * colors */
 typedef enum CellColor {
         CELL_BLUE, 
         CELL_RED, 
@@ -69,10 +70,12 @@ typedef struct Button {
         float height;
         int borderWidth;
         Color borderColor;
+        Color defaultColor;
         Color color;
         Color hoverColor;
         Color activeColor;
         int padLeft;
+        void (*HandleOnClickEvent) (void);
         Text text;
 } Button;
 
@@ -93,13 +96,14 @@ void DrawTetramino(Tetramino tetramino);
 void DrawGameOver(Button restartBtn);
 void DrawButton(Button btn);
 
-bool isThereYCollision(Tetramino tetra, CellColor well[PLAY_HEIGHT][PLAY_WIDTH]);
+bool isThereYCollision(Tetramino tetra, 
+                CellColor well[PLAY_HEIGHT][PLAY_WIDTH]);
 bool isThereXCollision(Tetramino tetra, CellColor well[PLAY_HEIGHT][PLAY_WIDTH], 
                 Direction dir);
 
 void MarkWell(Tetramino tetra, CellColor well[PLAY_HEIGHT][PLAY_WIDTH]);
-void ResetTetramino(Tetramino *current, TetraShape *nextTetramino);
-void GenerateRandomTetramino(int next[TETRA_SHAPE][TETRA_SHAPE]);
+void ResetTetraminoPos(Tetramino *current);
+void GenerateRandomTetramino(TetraShape *next);
 void MoveTetramino(Tetramino *tetra, CellColor well[PLAY_HEIGHT][PLAY_WIDTH]);
 void HandleInput(GameState gameState);
 void RotateTetraminoShape(int currentShape[TETRA_SHAPE][TETRA_SHAPE], 
@@ -113,13 +117,15 @@ void ClearRow(int row, CellColor well[PLAY_HEIGHT][PLAY_WIDTH]);
 void CopyRows(int n, int old[n], int new[n]);
 void ShiftDownRows(int startRow, CellColor well[PLAY_HEIGHT][PLAY_WIDTH]);
 void IncrementScore(int *score);
-CellColor GetRandomColor();
+CellColor GetRandomCellColor();
 Color CellColorToColor(CellColor cellColor);
 void InitWell(CellColor well[PLAY_HEIGHT][PLAY_WIDTH]);
+void SetupGame();
 
 void MainDraw(CellColor well[PLAY_HEIGHT][PLAY_WIDTH]);
 void MainUpdate();
 void UpdatePlayGame();
+void UpdateButton(Button *btn);
 
 TetraShape nextTetramino = {
         .cells = {{0}},
@@ -152,6 +158,7 @@ Button restartBtn = {
         .height = 50,
         .borderWidth = 2,
         .borderColor = BLACK,
+        .defaultColor = GRAY,
         .color = GRAY,
         .hoverColor = BLUE,
         .activeColor = RED,
@@ -159,7 +166,8 @@ Button restartBtn = {
                 .cstr = "Restart",
                 .fontSize = 30,
                 .fontColor = BLACK
-        }
+        },
+        .HandleOnClickEvent = SetupGame,
 };
 
 int main(void)
@@ -167,9 +175,7 @@ int main(void)
         InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Tetris Game");
         SetTargetFPS(TARGET_FPS);
 
-        InitWell(well);
-        GenerateRandomTetramino(currentTetramino.shape.cells);
-        GenerateRandomTetramino(nextTetramino.cells);
+        SetupGame();
 
         while(!WindowShouldClose()) {
                 BeginDrawing();
@@ -201,6 +207,29 @@ void MainUpdate()
         }
 }
 
+void UpdateButton(Button *btn)
+{
+        Vector2 mousePos = GetMousePosition();
+        int right = btn->pos.x;
+        int left = right + btn->width;
+        int top = btn->pos.y;
+        int bottom = top + btn->height;
+
+        if (mousePos.x >= right && mousePos.x <= left 
+                        && mousePos.y >= top && mousePos.y <= bottom) {
+
+                if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+                        btn->HandleOnClickEvent();
+
+                if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+                        btn->color = btn->activeColor;
+                } else
+                        btn->color = btn->hoverColor;
+        } else {
+                btn->color = btn->defaultColor;
+        }
+}
+
 void UpdatePlayGame() {
         if (!isThereYCollision(currentTetramino, well))
                 currentTetramino.y += CELL_SIZE;
@@ -208,12 +237,13 @@ void UpdatePlayGame() {
                 // update well
                 MarkWell(currentTetramino, well);
 
-                ResetTetramino(&currentTetramino, &nextTetramino);
+                ResetTetraminoPos(&currentTetramino);
+                currentTetramino.shape = nextTetramino;
 
                 CheckWinningCondition(well, &score);
                 CheckLosingCondition(well, &gameState);
 
-                GenerateRandomTetramino(nextTetramino.cells);
+                GenerateRandomTetramino(&nextTetramino);
         }
 }
 
@@ -225,6 +255,17 @@ void UpdatePlayGame() {
  * ===== HELPER FUNCTIONS =====
  */
 
+void SetupGame()
+{
+        score = 0;
+        level = 0;
+        InitWell(well);
+        GenerateRandomTetramino(&currentTetramino.shape);
+        ResetTetraminoPos(&currentTetramino);
+        GenerateRandomTetramino(&nextTetramino);
+        gameState = PLAY_STATE;
+}
+
 void InitWell(CellColor well[PLAY_HEIGHT][PLAY_WIDTH])
 {
         for (int i = 0; i < PLAY_HEIGHT; i++) {
@@ -234,10 +275,17 @@ void InitWell(CellColor well[PLAY_HEIGHT][PLAY_WIDTH])
         }
 }
 
-CellColor GetRandomColor()
+CellColor GetRandomCellColor()
 {
         srand(time(NULL));
-        int color = rand() % CELL_NONE;
+        static int prev = -1;
+
+        int color;
+        do {
+                color = rand() % CELL_NONE;
+        } while (color == prev);
+        prev = color;
+
         return (CellColor) color;
 }
 
@@ -305,21 +353,22 @@ void MarkWell(Tetramino tetra, CellColor well[PLAY_HEIGHT][PLAY_WIDTH])
         }
 }
 
-void ResetTetramino(Tetramino *current, TetraShape *nextTetramino)
+void ResetTetraminoPos(Tetramino *current)
 {
-        current->shape = *nextTetramino;
-
-        nextTetramino->cellColor = GetRandomColor();
-
         current->x = CELL_SIZE * 3;
         current->y = DEFAULT_Y;
 }
 
-void GenerateRandomTetramino(int next[TETRA_SHAPE][TETRA_SHAPE])
+void GenerateRandomTetramino(TetraShape *next)
 {
         srand(time(NULL));
+        static int prev = -1;
+        int type;
+        do {
+                type = (rand() % 6) + 1;
+        } while (type == prev);
+        prev = type;
 
-        int type = (rand() % 6) + 1;
         int (*nextType)[TETRA_SHAPE][TETRA_SHAPE]; 
 
         switch(type) {
@@ -372,7 +421,8 @@ void GenerateRandomTetramino(int next[TETRA_SHAPE][TETRA_SHAPE])
                         break;
         }
 
-        CopyMatrix(TETRA_SHAPE, TETRA_SHAPE, *nextType, next);
+        CopyMatrix(TETRA_SHAPE, TETRA_SHAPE, *nextType, next->cells);
+        next->cellColor = GetRandomCellColor();
 }
 
 void HandleInput(GameState gameState)
@@ -381,10 +431,7 @@ void HandleInput(GameState gameState)
                 MoveTetramino(&currentTetramino, well);
         }
 
-        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-                Vector2 mouse = GetMousePosition();
-                printf("mouseX: %0.3f mouseY: %0.3f\n", mouse.x, mouse.y);
-        }
+        UpdateButton(&restartBtn);
 }
 
 void MoveTetramino(Tetramino *tetra, CellColor well[PLAY_HEIGHT][PLAY_WIDTH])
