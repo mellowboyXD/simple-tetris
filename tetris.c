@@ -26,7 +26,7 @@
 #define SCREEN_WIDTH (WELL_WIDTH + WALL_OFFSET + RPANEL_WIDTH)
 #define SCREEN_HEIGHT (WELL_HEIGHT + WALL_OFFSET + DPANEL_HEIGHT)
 
-/* CELL_COLOR_COUNT acts as a sentinel value signifying the end */
+/* CELL_NONE acts as a sentinel value signifying the end */
 typedef enum CellColor {
         CELL_BLUE, 
         CELL_RED, 
@@ -57,6 +57,25 @@ typedef struct Tetramino {
         TetraShape shape;
 } Tetramino;
 
+typedef struct Text {
+        int fontSize;
+        Color fontColor;
+        const char *cstr;
+} Text;
+
+typedef struct Button {
+        Vector2 pos;
+        float width;
+        float height;
+        int borderWidth;
+        Color borderColor;
+        Color color;
+        Color hoverColor;
+        Color activeColor;
+        int padLeft;
+        Text text;
+} Button;
+
 void DrawCell(float x, float y, Color color);
 void DrawPanels();
 void DrawTextOnRPanel(const char *text, int x, int y, int fontSize, 
@@ -71,6 +90,8 @@ void DrawCredits();
 void DrawUI();
 void DrawWell(CellColor well[PLAY_HEIGHT][PLAY_WIDTH]);
 void DrawTetramino(Tetramino tetramino);
+void DrawGameOver(Button restartBtn);
+void DrawButton(Button btn);
 
 bool isThereYCollision(Tetramino tetra, CellColor well[PLAY_HEIGHT][PLAY_WIDTH]);
 bool isThereXCollision(Tetramino tetra, CellColor well[PLAY_HEIGHT][PLAY_WIDTH], 
@@ -79,7 +100,8 @@ bool isThereXCollision(Tetramino tetra, CellColor well[PLAY_HEIGHT][PLAY_WIDTH],
 void MarkWell(Tetramino tetra, CellColor well[PLAY_HEIGHT][PLAY_WIDTH]);
 void ResetTetramino(Tetramino *current, TetraShape *nextTetramino);
 void GenerateRandomTetramino(int next[TETRA_SHAPE][TETRA_SHAPE]);
-void HandleInput(Tetramino *tetra, CellColor well[PLAY_HEIGHT][PLAY_WIDTH]);
+void MoveTetramino(Tetramino *tetra, CellColor well[PLAY_HEIGHT][PLAY_WIDTH]);
+void HandleInput(GameState gameState);
 void RotateTetraminoShape(int currentShape[TETRA_SHAPE][TETRA_SHAPE], 
                 bool clockwise);
 void CopyMatrix(int m, int n, int old[m][n], int new[m][n]);
@@ -118,7 +140,27 @@ CellColor well[PLAY_HEIGHT][PLAY_WIDTH] = {0};
 int score = 0;
 int level = 1;
 
-GameState gameState = PLAY_STATE;
+GameState gameState = LOSE_STATE;
+
+Button restartBtn = {
+        .pos = {
+                .x = 348,
+                .y = 195
+        },
+        .padLeft = 18,
+        .width = 160,
+        .height = 50,
+        .borderWidth = 2,
+        .borderColor = BLACK,
+        .color = GRAY,
+        .hoverColor = BLUE,
+        .activeColor = RED,
+        .text = {
+                .cstr = "Restart",
+                .fontSize = 30,
+                .fontColor = BLACK
+        }
+};
 
 int main(void)
 {
@@ -149,7 +191,7 @@ void MainUpdate()
 {
         frameCounter++;
 
-        HandleInput(&currentTetramino, well);
+        HandleInput(gameState);
 
         if (frameCounter >= UPDATE_DELAY) {
                 if (gameState == PLAY_STATE) {
@@ -333,7 +375,19 @@ void GenerateRandomTetramino(int next[TETRA_SHAPE][TETRA_SHAPE])
         CopyMatrix(TETRA_SHAPE, TETRA_SHAPE, *nextType, next);
 }
 
-void HandleInput(Tetramino *tetra, CellColor well[PLAY_HEIGHT][PLAY_WIDTH])
+void HandleInput(GameState gameState)
+{
+        if (gameState == PLAY_STATE) {
+                MoveTetramino(&currentTetramino, well);
+        }
+
+        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                Vector2 mouse = GetMousePosition();
+                printf("mouseX: %0.3f mouseY: %0.3f\n", mouse.x, mouse.y);
+        }
+}
+
+void MoveTetramino(Tetramino *tetra, CellColor well[PLAY_HEIGHT][PLAY_WIDTH])
 {
         int oldShape[TETRA_SHAPE][TETRA_SHAPE] = {0};
         int key = GetKeyPressed();
@@ -512,13 +566,38 @@ void DrawWell(CellColor well[PLAY_HEIGHT][PLAY_WIDTH])
         }
 }
 
+void DrawButton(Button btn)
+{
+        int x = btn.pos.x;
+        int y = btn.pos.y; 
+        int w = btn.width;
+        int h = btn.height;
+        DrawRectangle(x, y, w, h, btn.borderColor);
+
+        x += btn.borderWidth;
+        y += btn.borderWidth;
+        w -= btn.borderWidth * 2;
+        h -= btn.borderWidth * 2;
+        DrawRectangle(x, y, w, h, btn.color);
+
+        int cy = (h / 2 + y) - (btn.text.fontSize / 2);
+        DrawText(btn.text.cstr, x + btn.padLeft, cy, btn.text.fontSize, 
+                        btn.text.fontColor);
+}
+
+void DrawGameOver(Button restartBtn)
+{
+        DrawTextOnRPanel("GAME OVER", 20, 128, 30, BLACK);
+        DrawButton(restartBtn);
+}
+
 void DrawUI()
 {
         DrawTextOnRPanel("Tetris", 20, 20, 48, BLACK);
         if (gameState == PLAY_STATE) {
                 DrawPeekTetraminoBlock(nextTetramino);
         } else if (gameState == LOSE_STATE) {
-                DrawTextOnRPanel("GAME OVER", 20, 128, 30, BLACK);
+                DrawGameOver(restartBtn);
         }
         DrawScore(score);
         DrawLevel(level);
