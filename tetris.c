@@ -350,7 +350,7 @@ void MuteAudio()
 void SetupGame()
 {
         score = 0;
-        level = 0;
+        level = 1;
         InitWell(well);
         GenerateRandomTetramino(&currentTetramino.shape);
         ResetTetraminoPos(&currentTetramino);
