@@ -90,12 +90,13 @@ void DrawPeekTetraminoBlock(TetraShape nextTetramino);
 void DrawScore(int score);
 void DrawLevel(int level);
 void DrawCommands();
-void DrawCredits();
+void DrawCredits(bool inverted);
 void DrawUI();
 void DrawWell(CellColor well[PLAY_HEIGHT][PLAY_WIDTH]);
 void DrawTetramino(Tetramino tetramino);
 void DrawGameOver(Button restartBtn);
 void DrawButton(Button btn);
+void DrawGameMenu();
 
 bool isThereYCollision(Tetramino tetra, 
                 CellColor well[PLAY_HEIGHT][PLAY_WIDTH]);
@@ -130,6 +131,10 @@ void UpdatePlayGame();
 void UpdateButton(Button *btn);
 void UpdateAudio(Music *music, bool isPaused);
 
+/*
+ * GLOBAL VARIABLES
+ */
+
 TetraShape nextTetramino = {
         .cells = {{0}},
         .cellColor = CELL_RED
@@ -147,12 +152,12 @@ Tetramino currentTetramino = {
 CellColor well[PLAY_HEIGHT][PLAY_WIDTH] = {0};
 
 int score = 0;
-int level = 1;
+int level = 1; /* TODO: Update level after some score achieved */
 
 Music bgMusic;
 bool isMuted = false;
 
-GameState gameState = LOSE_STATE;
+GameState gameState = MENU_STATE;
 
 Button restartBtn = {
         .pos = {
@@ -198,6 +203,32 @@ Button muteBtn = {
         .HandleOnClickEvent = MuteAudio,
 };
 
+Button startBtn = {
+        .pos = {
+                .x = (SCREEN_WIDTH / 2) - 75,
+                .y = SCREEN_HEIGHT / 2 + 30,
+        },
+        .padLeft = 15,
+        .width = 110,
+        .height = 50,
+        .borderWidth = 2,
+        .borderColor = RAYWHITE,
+        .defaultColor = BLACK,
+        .color = BLACK,
+        .hoverColor = BLUE,
+        .activeColor = RED,
+        .text = {
+                .cstr = "Start",
+                .fontSize = 28,
+                .fontColor = RAYWHITE,
+        },
+        .HandleOnClickEvent = SetupGame,
+};
+
+/*
+ *
+ */
+
 int main(void)
 {
         InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Tetris Game");
@@ -212,14 +243,11 @@ int main(void)
 
         PlayMusicStream(bgMusic);
 
-        SetupGame();
-
         while(!WindowShouldClose()) {
                 BeginDrawing();
                 ClearBackground(GRAY);
                 MainDraw(well);
                 MainUpdate();
-                UpdateAudio(&bgMusic, isMuted);
                 EndDrawing();
         }
 
@@ -239,6 +267,7 @@ void MainUpdate()
         frameCounter++;
 
         HandleInput(gameState);
+        UpdateAudio(&bgMusic, isMuted);
 
         if (frameCounter >= UPDATE_DELAY) {
                 if (gameState == PLAY_STATE) {
@@ -490,12 +519,16 @@ void GenerateRandomTetramino(TetraShape *next)
 
 void HandleInput(GameState gameState)
 {
-        if (gameState == PLAY_STATE) {
+        if (gameState == MENU_STATE) {
+                UpdateButton(&startBtn);
+        } else if (gameState == PLAY_STATE) {
                 MoveTetramino(&currentTetramino, well);
+        } else if (gameState == LOSE_STATE) {
+                UpdateButton(&restartBtn);
         }
-
-        UpdateButton(&restartBtn);
+        
         UpdateButton(&muteBtn);
+
 }
 
 void MoveTetramino(Tetramino *tetra, CellColor well[PLAY_HEIGHT][PLAY_WIDTH])
@@ -653,10 +686,28 @@ int GetWinningRow(CellColor well[PLAY_HEIGHT][PLAY_WIDTH])
 
 void MainDraw(CellColor well[PLAY_HEIGHT][PLAY_WIDTH])
 {
+        DrawButton(muteBtn);
+
+        if (gameState == MENU_STATE) {
+                DrawGameMenu();
+                return;
+        }
+
         DrawUI();
         DrawWell(well);
         DrawTetramino(currentTetramino);
 
+}
+
+void DrawGameMenu()
+{
+        int cx = SCREEN_WIDTH / 2;
+        int cy = SCREEN_HEIGHT / 2;
+
+        ClearBackground(BLACK);
+        DrawText("Tetris", cx - 20, cy - 40, 72, RAYWHITE);
+        DrawButton(startBtn);
+        DrawCredits(true);
 }
 
 void DrawWell(CellColor well[PLAY_HEIGHT][PLAY_WIDTH])
@@ -713,8 +764,7 @@ void DrawUI()
         DrawScore(score);
         DrawLevel(level);
         DrawCommands();
-        DrawCredits();
-        DrawButton(muteBtn);
+        DrawCredits(false);
 }
 
 void DrawCell(float x, float y, Color color)
@@ -817,12 +867,12 @@ void DrawCommands()
         DrawTextOnRPanel("Arrow keys - Move", x, y, 20, BLACK);
 }
 
-void DrawCredits()
+void DrawCredits(bool inverted)
 {
         float x = 20;
-        float y = 12;
-
-        DrawTextOnDPanel("by mellowboyxd", x, y, 18, BLACK);
+        float y = 8;
+        Color color = inverted ? RAYWHITE : BLACK;
+        DrawTextOnDPanel("by mellowboyxd", x, y, 18, color);
 }
 
 void DrawTetramino(Tetramino tetra)
