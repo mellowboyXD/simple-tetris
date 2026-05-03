@@ -25,6 +25,7 @@
 #define DPANEL_HEIGHT 32
 #define SCREEN_WIDTH (WELL_WIDTH + WALL_OFFSET + RPANEL_WIDTH)
 #define SCREEN_HEIGHT (WELL_HEIGHT + WALL_OFFSET + DPANEL_HEIGHT)
+#define DEFAULT_VOLUME 0.4f
 
 /* CELL_NONE also acts as a sentinel value signifying the end of the list of 
  * colors */
@@ -121,6 +122,7 @@ CellColor GetRandomCellColor();
 Color CellColorToColor(CellColor cellColor);
 void InitWell(CellColor well[PLAY_HEIGHT][PLAY_WIDTH]);
 void SetupGame();
+void MuteAudio();
 
 void MainDraw(CellColor well[PLAY_HEIGHT][PLAY_WIDTH]);
 void MainUpdate();
@@ -147,6 +149,9 @@ CellColor well[PLAY_HEIGHT][PLAY_WIDTH] = {0};
 int score = 0;
 int level = 1;
 
+Music bgMusic;
+bool isMuted = false;
+
 GameState gameState = LOSE_STATE;
 
 Button restartBtn = {
@@ -171,6 +176,28 @@ Button restartBtn = {
         .HandleOnClickEvent = SetupGame,
 };
 
+Button muteBtn = {
+        .pos = {
+                .x = 335,
+                .y = SCREEN_HEIGHT - 34
+        },
+        .padLeft = 20,
+        .width = 90,
+        .height = 30,
+        .borderWidth = 2,
+        .borderColor = BLACK,
+        .defaultColor = GRAY,
+        .color = GRAY,
+        .hoverColor = BLUE,
+        .activeColor = RED,
+        .text = {
+                .cstr = "Mute",
+                .fontSize = 20,
+                .fontColor = BLACK,
+        },
+        .HandleOnClickEvent = MuteAudio,
+};
+
 int main(void)
 {
         InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Tetris Game");
@@ -179,11 +206,9 @@ int main(void)
 
         SetTargetFPS(TARGET_FPS);
 
-        Music bgMusic = LoadMusicStream("assets/audio/stardust_renderer.mp3");
-        float volume = 0.8f;
-        bool isPaused = false;
+        bgMusic = LoadMusicStream("assets/audio/stardust_renderer.mp3");
 
-        SetMusicVolume(bgMusic, volume);
+        SetMusicVolume(bgMusic, DEFAULT_VOLUME);
 
         PlayMusicStream(bgMusic);
 
@@ -194,7 +219,7 @@ int main(void)
                 ClearBackground(GRAY);
                 MainDraw(well);
                 MainUpdate();
-                UpdateAudio(&bgMusic, isPaused);
+                UpdateAudio(&bgMusic, isMuted);
                 EndDrawing();
         }
 
@@ -278,6 +303,20 @@ void UpdatePlayGame() {
 /*
  * ===== HELPER FUNCTIONS =====
  */
+
+void MuteAudio()
+{
+        printf("mute audio\n");
+        isMuted = !isMuted;
+
+        if (isMuted) {
+                muteBtn.text.cstr = "Unmute";
+                muteBtn.padLeft = 10;
+        } else {
+                muteBtn.text.cstr = "Mute";
+                muteBtn.padLeft = 20;
+        }
+}
 
 void SetupGame()
 {
@@ -456,6 +495,7 @@ void HandleInput(GameState gameState)
         }
 
         UpdateButton(&restartBtn);
+        UpdateButton(&muteBtn);
 }
 
 void MoveTetramino(Tetramino *tetra, CellColor well[PLAY_HEIGHT][PLAY_WIDTH])
@@ -674,6 +714,7 @@ void DrawUI()
         DrawLevel(level);
         DrawCommands();
         DrawCredits();
+        DrawButton(muteBtn);
 }
 
 void DrawCell(float x, float y, Color color)
